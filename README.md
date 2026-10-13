@@ -8,6 +8,8 @@ Windows / Mac 対応の Bluetooth 機器バッテリー残量表示アプリ。�
 
 Battery level monitor for Bluetooth devices on Windows and Mac. Shows both halves of split keyboards at once.
 
+<sub>Claude Code で作成 / Built with [Claude Code](https://claude.com/claude-code) — [制作について / About](#制作について--about)</sub>
+
 > アイコンは、一対の「片割れ」を表す家紋「二つ巴」に、七宝文様を織り込み、あえて途切れさせた金の輪（破れ）を重ねたものです。
 >
 > The icon is a *futatsu-domoe* — two interlocking commas, a pair of "kataware" (halves) — woven with the *shippo* pattern and framed by a deliberately broken gold ring.
@@ -54,6 +56,30 @@ Bluetooth LE の標準「Battery Service」で残量を公開している機器�
 2. 「Windows によって PC が保護されました」と出たら **詳細情報 → 実行**（署名なしアプリのため）
 3. **ウィンドウは開きません。** 通知領域（右下の `^` の中）にアイコンが出ます（初回は「起動しました」の通知が出ます）。
    常に見えるようにするには、アイコンをタスクバーへドラッグしてください
+
+#### 目立たない場所に置いて自動起動する（おすすめ・Windows）
+
+デスクトップなどに .exe を置きたくない場合は、次の場所にしまっておけます。
+OneDrive の同期対象にならず、普通のアプリもよく入っている場所です。
+
+```
+%LOCALAPPDATA%\Programs\Kataware\Kataware-Windows-x64.exe
+```
+
+1. 起動中なら、通知領域のアイコンのメニューから **終了**
+2. エクスプローラーのアドレス欄に `%LOCALAPPDATA%\Programs` と入力して Enter
+3. **新規作成 → フォルダー** で `Kataware` フォルダーを作り、その中に `Kataware-Windows-x64.exe` を移動
+4. .exe を右クリック → プロパティ → 「全般」タブ下部の **許可する** にチェック → OK
+5. .exe をダブルクリックして起動し、メニューの **ログイン時に起動** にチェック
+   （すでにチェック済みなら、この場所で一度起動するだけで登録先が自動で切り替わります）
+
+これで次回からは PC の起動時に自動で常駐します。.exe を開く必要はありません。
+
+#### 通知領域のアイコンも隠したいとき（Windows）
+
+設定 → 個人用設定 → タスクバー → **その他のシステム トレイ アイコン** で Kataware をオフにすると、アイコンは「^」の中にしまわれます。
+残量は「^」を開けばいつでも確認でき、残量低下の通知も届きます。
+（逆にオンにすると、タスクバーに常に表示されます）
 
 #### タスクバーにピン留めして起動したい場合（Windows）
 
@@ -170,6 +196,13 @@ Get the file for your OS from the **Assets** of the [latest release](https://git
 2. If "Windows protected your PC" appears, click **More info → Run anyway** (the app is not code-signed)
 3. **No window opens.** The icon appears in the notification area (inside `^` at the bottom right). Drag it onto the taskbar to keep it visible
 
+#### Keeping it out of sight (recommended, Windows)
+
+Store the app in `%LOCALAPPDATA%\Programs\Kataware\Kataware-Windows-x64.exe` (not synced by OneDrive):
+quit the app, type `%LOCALAPPDATA%\Programs` in the Explorer address bar, create a `Kataware` folder, move the .exe there,
+right-click it → Properties → **Unblock**, launch it once and enable **launch at login** (ログイン時に起動) in the menu.
+To hide the tray icon as well: Settings → Personalization → Taskbar → **Other system tray icons** → turn Kataware off (it stays available under `^`).
+
 #### Pinning to the taskbar (Windows)
 
 If a pinned shortcut fails with "This file was blocked by your organization's application control policy", Windows is blocking the downloaded file (Mark of the Web).
@@ -224,6 +257,15 @@ python packaging/make_icons.py && pyinstaller --noconfirm packaging/kataware.spe
 ```
 
 GitHub Actions builds the app on Windows and macOS (Apple silicon / Intel) virtual machines, then runs the unit tests and a self-test of the packaged app (`--self-test`). A release `v<version>` is published only when every platform passes — triggered by a `v*` tag or a push whose commit message contains `[release]`.
+
+## 制作について / About
+
+Kataware は、[Claude Code](https://claude.com/claude-code)（Anthropic の AI コーディングツール）を使って作成しました。
+kyonccc が「分割キーボードの左右両方の残量を、Windows でも Mac でもエラーなく確認したい」という思想・要件と、名前やアイコンの方向性を示し、
+設計・実装・テスト・リリース作業は Claude Code が行っています。
+
+Kataware was built with [Claude Code](https://claude.com/claude-code), Anthropic's AI coding tool.
+kyonccc provided the idea, the requirements and the direction for the name and icon; the design, code, tests and releases were produced by Claude Code.
 
 ## ライセンス / License
 
