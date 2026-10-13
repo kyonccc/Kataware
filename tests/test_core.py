@@ -119,3 +119,23 @@ def test_settings_migrated_from_splitbattery(tmp_path, monkeypatch):
     monkeypatch.setenv("KATAWARE_HOME", str(tmp_path / "Kataware"))
     migrate_from_old_name()
     assert SettingsStore(tmp_path / "Kataware" / "config.json").settings.central_side == {"kb": "right"}
+
+
+def test_autostart_follows_moved_app(tmp_path, monkeypatch):
+    import plistlib
+
+    from kataware import platform_utils as pu
+
+    monkeypatch.setattr(pu.sys, "platform", "darwin")
+    monkeypatch.setattr(pu.Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.setattr(pu, "is_frozen", lambda: True)
+
+    monkeypatch.setattr(pu, "launch_command", lambda: ["/old/Kataware.app/Contents/MacOS/Kataware"])
+    assert not pu.refresh_autostart_path()  # not registered -> nothing to do
+    pu.set_autostart(True)
+    assert not pu.refresh_autostart_path()  # same path -> unchanged
+
+    monkeypatch.setattr(pu, "launch_command", lambda: ["/new/Kataware.app/Contents/MacOS/Kataware"])
+    assert pu.refresh_autostart_path()
+    with open(pu._mac_agent_path(), "rb") as f:
+        assert plistlib.load(f)["ProgramArguments"] == ["/new/Kataware.app/Contents/MacOS/Kataware"]

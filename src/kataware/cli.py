@@ -167,7 +167,7 @@ def main(argv: list[str] | None = None) -> int:
         return read_once(args.demo)
 
     from .config import APP_NAME, log_path
-    from .platform_utils import migrate_from_old_name, show_message, tray_location_hint
+    from .platform_utils import migrate_from_old_name, refresh_autostart_path, show_message, tray_location_hint
 
     lock = _single_instance()
     if lock is None:
@@ -175,6 +175,7 @@ def main(argv: list[str] | None = None) -> int:
         show_message(APP_NAME, f"{APP_NAME} は既に起動しています。\n{tray_location_hint()}")
         return 0
     migrate_from_old_name()
+    refresh_autostart_path()
     try:
         from .app import TrayApp
 

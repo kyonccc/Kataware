@@ -43,7 +43,8 @@ Bluetooth LE の標準「Battery Service」で残量を公開している機器�
 
 #### Windows の初回起動
 
-1. `Kataware-Windows-x64.exe` を分かりやすい場所（例: `ドキュメント\Kataware`）に置いてダブルクリック
+1. `Kataware-Windows-x64.exe` を置き場所を決めて（おすすめ: `%LOCALAPPDATA%\Programs\Kataware`。OneDrive で同期されるデスクトップやダウンロードフォルダーは避ける）ダブルクリック
+   — 後から移動しても、移動先で一度起動すれば「ログイン時に起動」の登録先も自動で更新されます
 2. 「Windows によって PC が保護されました」と出たら **詳細情報 → 実行**（署名なしアプリのため）
 3. **ウィンドウは開きません。** 通知領域（右下の `^` の中）にアイコンが出ます（初回は「起動しました」の通知が出ます）。
    常に見えるようにするには、アイコンをタスクバーへドラッグしてください
@@ -159,7 +160,7 @@ Get the file for your OS from the **Assets** of the [latest release](https://git
 
 #### First launch on Windows
 
-1. Put `Kataware-Windows-x64.exe` somewhere permanent and double-click it
+1. Put `Kataware-Windows-x64.exe` somewhere permanent (recommended: `%LOCALAPPDATA%\Programs\Kataware`) and double-click it — if you move it later, launch it once from the new place and the login item follows
 2. If "Windows protected your PC" appears, click **More info → Run anyway** (the app is not code-signed)
 3. **No window opens.** The icon appears in the notification area (inside `^` at the bottom right). Drag it onto the taskbar to keep it visible
 

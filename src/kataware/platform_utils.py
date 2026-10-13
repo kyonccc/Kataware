@@ -130,6 +130,43 @@ def set_autostart(enabled: bool) -> None:
         log.exception("ログイン時起動の設定に失敗しました")
 
 
+def _registered_command() -> list[str] | None:
+    """The command currently registered to run at login, or None."""
+    try:
+        if sys.platform == "win32":
+            import shlex
+            import winreg
+
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY) as k:
+                value, _ = winreg.QueryValueEx(k, APP_NAME)
+            return [a.strip('"') for a in shlex.split(value, posix=False)]
+        if sys.platform == "darwin":
+            path = _mac_agent_path()
+            if path.exists():
+                with open(path, "rb") as f:
+                    return list(plistlib.load(f).get("ProgramArguments", []))
+    except (OSError, ValueError, plistlib.InvalidFileException):
+        return None
+    return None
+
+
+def refresh_autostart_path() -> bool:
+    """Keep the login item pointing at this copy of the app.
+
+    The login item stores the executable's path, so moving the .exe / .app
+    used to silently break launch at login. Re-register on every start of a
+    packaged build if the path changed. Returns True when it was rewritten.
+    """
+    if not is_frozen():
+        return False
+    registered = _registered_command()
+    if registered is None or registered == launch_command():
+        return False
+    log.info("ログイン時起動の登録先を更新します: %s -> %s", registered, launch_command())
+    set_autostart(True)
+    return True
+
+
 # --- migration from the previous name (SplitBattery) ------------------------
 
 _OLD_NAME = "SplitBattery"
