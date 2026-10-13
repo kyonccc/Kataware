@@ -74,9 +74,12 @@ def render_icon(levels: list[LabeledLevel], style: str = "numbers", low: int = 2
     if style == "bars":
         n = len(shown)
         gap = 6
-        bar_w = (SIZE - gap * (n + 1)) // n
+        # Same battery width whether one or two are shown, so a single
+        # device does not get a fat battery stretched across the icon.
+        bar_w = (SIZE - gap * 3) // 2
+        start = (SIZE - (n * bar_w + (n - 1) * gap)) // 2
         for i, lv in enumerate(shown):
-            x0 = gap + i * (bar_w + gap)
+            x0 = start + i * (bar_w + gap)
             x1 = x0 + bar_w
             top, bottom = 10, SIZE - 3
             d.rounded_rectangle((x0 + bar_w // 3, 3, x1 - bar_w // 3, top), radius=2, fill=WHITE)
