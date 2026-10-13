@@ -139,3 +139,13 @@ def test_autostart_follows_moved_app(tmp_path, monkeypatch):
     assert pu.refresh_autostart_path()
     with open(pu._mac_agent_path(), "rb") as f:
         assert plistlib.load(f)["ProgramArguments"] == ["/new/Kataware.app/Contents/MacOS/Kataware"]
+
+
+def test_parse_bt_address_from_pnp_ids():
+    from kataware.backends.windows import _unbox_level, parse_bt_address
+
+    assert parse_bt_address(r"BTHENUM\DEV_A1B2C3D4E5F6\8&1A2B3C4D&0&BLUETOOTHDEVICE_A1B2C3D4E5F6") == 0xA1B2C3D4E5F6
+    assert parse_bt_address(r"BTHLE\DEV_d0e1f2a3b4c5\9&2f3&0&d0e1f2a3b4c5") == 0xD0E1F2A3B4C5
+    assert parse_bt_address(r"BTHENUM\{0000110e-0000-1000-8000-00805f9b34fb}_LOCALMFG&005d\7&2C&0&001122334455_C00000000") == 0x001122334455
+    assert parse_bt_address(r"USB\VID_046D&PID_C52B\5&1") is None
+    assert _unbox_level(95) == 95 and _unbox_level(None) is None and _unbox_level(255) is None

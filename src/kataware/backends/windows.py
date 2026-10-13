@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import uuid
 
 from ..models import BatteryCell, DeviceBattery
@@ -23,6 +24,20 @@ from . import BAS_SERVICE, BATTERY_LEVEL, USER_DESCRIPTION, Backend, BackendUnav
 log = logging.getLogger(__name__)
 
 OP_TIMEOUT = 10.0
+
+# DEVPKEY_Bluetooth_Battery: the battery level Windows itself shows in
+# Settings > Bluetooth & devices. Windows fills it for Classic devices
+# (e.g. hands-free profile) and for LE keyboards / mice it talks to directly.
+WIN_BATTERY_PROP = "{104EA319-6EE2-4701-BD47-8DDBF425BBE5} 2"
+_ADDR_RE = re.compile(r"DEV_([0-9A-F]{12})|&([0-9A-F]{12})_C0", re.IGNORECASE)
+
+
+def parse_bt_address(instance_id: str) -> int | None:
+    """Bluetooth address from a PnP instance id such as BTHENUM\\DEV_A1B2C3D4E5F6\\..."""
+    m = _ADDR_RE.search(instance_id or "")
+    if not m:
+        return None
+    return int(m.group(1) or m.group(2), 16)
 
 
 class WindowsBackend(Backend):
@@ -45,6 +60,7 @@ class WindowsBackend(Backend):
         self.gatt = gatt
         self.enum = enum
         self.loop = asyncio.new_event_loop()
+        self._skipped: dict[str, str] = {}
 
     def close(self) -> None:
         try:
@@ -60,19 +76,23 @@ class WindowsBackend(Backend):
         required = {
             bt.BluetoothAdapter: ["get_default_async"],
             bt.BluetoothLEDevice: ["get_device_selector_from_pairing_state", "from_id_async",
+                                   "from_bluetooth_address_async", "bluetooth_address",
                                    "get_gatt_services_for_uuid_with_cache_mode_async", "close",
                                    "connection_status", "name"],
             gatt.GattDeviceService: ["get_characteristics_for_uuid_with_cache_mode_async", "close"],
             gatt.GattCharacteristic: ["read_value_with_cache_mode_async", "user_description",
                                       "attribute_handle", "get_descriptors_for_uuid_with_cache_mode_async"],
             gatt.GattDescriptor: ["read_value_with_cache_mode_async"],
-            enum.DeviceInformation: ["find_all_async_aqs_filter"],
+            enum.DeviceInformation: ["find_all_async_aqs_filter",
+                                     "find_all_async_with_kind_aqs_filter_and_additional_properties",
+                                     "properties", "id", "name"],
+            bt.BluetoothDevice: ["from_bluetooth_address_async", "connection_status", "name", "close"],
         }
         missing = [f"{cls.__name__}.{name}" for cls, names in required.items()
                    for name in names if not hasattr(cls, name)]
         if missing:
             raise AttributeError(f"WinRT API が見つかりません: {missing}")
-        _ = (bt.BluetoothCacheMode.CACHED, bt.BluetoothCacheMode.UNCACHED,
+        _ = (enum.DeviceInformationKind.DEVICE, bt.BluetoothCacheMode.CACHED, bt.BluetoothCacheMode.UNCACHED,
              bt.BluetoothConnectionStatus.CONNECTED, gatt.GattCommunicationStatus.SUCCESS)
 
         async def enumerate_paired():
@@ -80,7 +100,12 @@ class WindowsBackend(Backend):
             infos = await self._await(enum.DeviceInformation.find_all_async_aqs_filter(selector))
             return [i.name for i in infos]
 
-        return {"paired_le_devices": self.loop.run_until_complete(enumerate_paired())}
+        async def windows_battery():
+            return [d.name for d in await self._read_windows_battery(set(), {})]
+
+        return {"paired_le_devices": self.loop.run_until_complete(enumerate_paired()),
+                "windows_battery_devices": self.loop.run_until_complete(windows_battery()),
+                "windows_battery_query": getattr(self, "query_mode", "")}
 
     async def _await(self, op, timeout: float = OP_TIMEOUT):
         return await asyncio.wait_for(op, timeout)
@@ -91,16 +116,79 @@ class WindowsBackend(Backend):
         selector = bt.BluetoothLEDevice.get_device_selector_from_pairing_state(True)
         infos = await self._await(enum.DeviceInformation.find_all_async_aqs_filter(selector))
         results: list[DeviceBattery] = []
+        skipped: dict[str, str] = {}
+        gatt_addresses: set[int] = set()
         for info in infos:
+            name = info.name or info.id
             try:
-                dev = await self._read_device(info.id, info.name)
+                dev, reason, address = await self._read_device(info.id, info.name)
+                if address is not None and dev is not None:
+                    gatt_addresses.add(address)
                 if dev is not None:
                     results.append(dev)
+                else:
+                    skipped[name] = reason
             except Exception as e:
                 log.warning("%s の読み取りに失敗: %r", info.name, e)
                 results.append(DeviceBattery(device_id=info.id, name=info.name or "不明なデバイス",
                                              error=_short_error(e)))
+        try:
+            for dev in await self._read_windows_battery(gatt_addresses, skipped):
+                results.append(dev)
+                skipped.pop(dev.name, None)
+        except Exception as e:
+            log.warning("Windows のバッテリー情報を取得できません: %r", e)
+        if skipped != self._skipped:
+            for name, reason in sorted(skipped.items()):
+                log.info("表示しない機器: %s (%s)", name, reason)
+            self._skipped = skipped
         return results
+
+    async def _read_windows_battery(self, gatt_addresses: set[int], skipped: dict[str, str]) -> list[DeviceBattery]:
+        """Fallback for devices whose battery we cannot read over GATT (Classic
+        Bluetooth, or LE devices that hide the Battery Service): use the value
+        Windows shows in Settings."""
+        bt, enum = self.bt, self.enum
+        kind = enum.DeviceInformationKind.DEVICE
+        find = enum.DeviceInformation.find_all_async_with_kind_aqs_filter_and_additional_properties
+        try:
+            infos = await self._await(find(f"{WIN_BATTERY_PROP}:<>[]", [WIN_BATTERY_PROP], kind))
+            self.query_mode = "aqs"
+        except Exception as e:  # AQS not accepted: scan every device node instead
+            log.debug("AQS フィルターが使えません (%r)。全デバイスを確認します", e)
+            infos = await self._await(find("", [WIN_BATTERY_PROP], kind), 30)
+            self.query_mode = "scan"
+
+        found: dict[int, DeviceBattery] = {}
+        for info in infos:
+            props = info.properties
+            level = _unbox_level(props[WIN_BATTERY_PROP] if props is not None and WIN_BATTERY_PROP in props else None)
+            address = parse_bt_address(info.id)
+            if level is None or address is None or address in gatt_addresses or address in found:
+                continue
+            name, connected = await self._classic_or_le_status(address)
+            name = name or info.name or "不明なデバイス"
+            if not connected:
+                skipped[name] = "未接続 (Windows の値)"
+                continue
+            found[address] = DeviceBattery(device_id=f"win:{address:012X}", name=name,
+                                           cells=[BatteryCell(level, "", 0)])
+        return list(found.values())
+
+    async def _classic_or_le_status(self, address: int) -> tuple[str, bool]:
+        bt = self.bt
+        for cls in (bt.BluetoothDevice, bt.BluetoothLEDevice):
+            dev = None
+            try:
+                dev = await self._await(cls.from_bluetooth_address_async(address), 5)
+                if dev is not None:
+                    return dev.name, dev.connection_status == bt.BluetoothConnectionStatus.CONNECTED
+            except Exception as e:
+                log.debug("%012X の接続状態を取得できません: %r", address, e)
+            finally:
+                if dev is not None:
+                    _safe_close(dev)
+        return "", False
 
     async def _check_adapter(self) -> None:
         bt = self.bt
@@ -113,15 +201,18 @@ class WindowsBackend(Backend):
         if not adapter.is_low_energy_supported:
             raise BackendUnavailable("この PC の Bluetooth は LE に対応していません")
 
-    async def _read_device(self, device_id: str, fallback_name: str) -> DeviceBattery | None:
+    async def _read_device(self, device_id: str, fallback_name: str
+                           ) -> tuple[DeviceBattery | None, str, int | None]:
+        """Returns (battery or None, reason it was skipped, Bluetooth address)."""
         bt, gatt = self.bt, self.gatt
         device = await self._await(bt.BluetoothLEDevice.from_id_async(device_id))
         if device is None:
-            return None
+            return None, "デバイスを開けません", None
         services = []
         try:
+            address = int(device.bluetooth_address)
             if device.connection_status != bt.BluetoothConnectionStatus.CONNECTED:
-                return None
+                return None, "未接続", address
             name = device.name or fallback_name or "不明なデバイス"
             res = await self._await(device.get_gatt_services_for_uuid_with_cache_mode_async(
                 uuid.UUID(BAS_SERVICE), bt.BluetoothCacheMode.CACHED))
@@ -131,17 +222,17 @@ class WindowsBackend(Backend):
                 res = await self._await(device.get_gatt_services_for_uuid_with_cache_mode_async(
                     uuid.UUID(BAS_SERVICE), bt.BluetoothCacheMode.UNCACHED))
             if res.status != gatt.GattCommunicationStatus.SUCCESS:
-                log.info("%s: バッテリーサービスを取得できません (status=%s)", name, res.status)
-                return None
+                return None, f"バッテリーサービスにアクセスできません (status={res.status})", address
             services = list(res.services)
             if not services:
-                return None  # device has no battery service
+                return None, "バッテリーサービスがありません", address
             cells: list[BatteryCell] = []
             for svc in services:
                 cells.extend(await self._read_service(svc))
             if not cells:
-                return DeviceBattery(device_id=device_id, name=name, error="バッテリー値を読み取れません")
-            return DeviceBattery(device_id=device_id, name=name, cells=cells)
+                return (DeviceBattery(device_id=device_id, name=name, error="バッテリー値を読み取れません"),
+                        "", address)
+            return DeviceBattery(device_id=device_id, name=name, cells=cells), "", address
         finally:
             for svc in services:
                 _safe_close(svc)
@@ -192,6 +283,27 @@ class WindowsBackend(Backend):
         except Exception as e:
             log.debug("User Description 取得失敗: %r", e)
         return ""
+
+
+def _unbox_level(value) -> int | None:
+    """WinRT property values arrive boxed; the battery property is a byte."""
+    if value is None:
+        return None
+    if isinstance(value, int):
+        level = value
+    else:
+        from winrt import system
+
+        level = None
+        for unbox in ("unbox_uint8", "unbox_int32", "unbox_uint32", "unbox_int16", "unbox_uint16"):
+            try:
+                level = int(getattr(system, unbox)(value))
+                break
+            except Exception:
+                continue
+        if level is None:
+            return None
+    return level if 0 <= level <= 100 else None
 
 
 def _safe_close(obj) -> None:

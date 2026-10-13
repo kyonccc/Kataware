@@ -35,9 +35,11 @@ Bluetooth LE の標準「Battery Service」で残量を公開している機器�
 
 - バッテリー情報が 2 つ以上ある機器（分割キーボードなど）は「左 / 右」に分けて表示
 - 1 つの機器は「本体」として表示
+- Windows では、上記の方式で読めない機器（旧来の Bluetooth（Classic）方式のキーボード・イヤホンなど）も、
+  Windows の設定画面に残量が出ていれば同じ値を表示します（左右の分割表示はできません）
 - 次の機器は表示できません
-  - 旧来の Bluetooth（Classic）方式だけで残量を送る機器（一部のイヤホン・ヘッドホンなど）
   - PC とペアリング・接続されていない機器
+  - 残量の情報を持たない機器（Mac では Classic 方式の機器も対象外）
 
 ### ダウンロード
 
@@ -164,9 +166,10 @@ Any device that exposes its battery through the standard Bluetooth LE **Battery 
 
 - Devices with two or more battery values (split keyboards) are shown as "Left / Right"
 - Devices with one battery value are shown as a single level
+- On Windows, devices that cannot be read that way (e.g. Bluetooth Classic keyboards or earbuds) are shown with the same level Windows Settings shows (single value, no left/right)
 - Not supported:
-  - Devices that report battery only over Bluetooth Classic (some earbuds / headphones)
   - Devices that are not paired and connected to this computer
+  - Devices without battery information (and Bluetooth Classic devices on Mac)
 
 ### Download
 
