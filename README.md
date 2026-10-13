@@ -52,6 +52,15 @@ Bluetooth LE の標準「Battery Service」で残量を公開している機器�
 | Mac (Apple シリコン M1〜) | `Kataware-macOS-AppleSilicon.zip` |
 | Mac (Intel) | `Kataware-macOS-Intel.zip` |
 
+#### ダウンロードしたファイルの確認（任意）
+
+各リリースには `SHA256SUMS.txt`（改ざんチェック用のハッシュ値）と、GitHub による「ビルド証明」が付いています。
+[GitHub CLI](https://cli.github.com/) があれば、このリポジトリーの GitHub Actions でビルドされた本物か確認できます。
+
+```
+gh attestation verify Kataware-Windows-x64.exe --repo kyonccc/Kataware
+```
+
 #### Windows の初回起動
 
 1. `Kataware-Windows-x64.exe` を置き場所を決めて（おすすめ: `%LOCALAPPDATA%\Programs\Kataware`。OneDrive で同期されるデスクトップやダウンロードフォルダーは避ける）ダブルクリック
@@ -187,6 +196,11 @@ Get the file for your OS from the **Assets** of the [latest release](https://git
 | Windows 10 / 11 (64-bit) | `Kataware-Windows-x64.exe` |
 | Mac (Apple silicon) | `Kataware-macOS-AppleSilicon.zip` |
 | Mac (Intel) | `Kataware-macOS-Intel.zip` |
+
+#### Verifying the download (optional)
+
+Every release ships `SHA256SUMS.txt` and a GitHub build provenance attestation. With the [GitHub CLI](https://cli.github.com/):
+`gh attestation verify Kataware-Windows-x64.exe --repo kyonccc/Kataware`
 
 #### First launch on Windows
 
