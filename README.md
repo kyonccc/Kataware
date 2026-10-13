@@ -253,7 +253,7 @@ GitHub Actions builds the app on Windows and macOS (Apple silicon / Intel) virtu
 ## 制作について / About
 
 Kataware は、[Claude Code](https://claude.com/claude-code)（Anthropic の AI コーディングツール）を使って作成しました。
-kyonccc が「分割キーボードの左右両方の残量を、Windows でも Mac でもエラーなく確認したい」という思想・要件と、名前やアイコンの方向性を示し、
+kyonccc が「分割キーボードの左右両方の残量を確認したい」という思想・要件と、名前やアイコンの方向性を示し、
 設計・実装・テスト・リリース作業は Claude Code が行っています。
 
 Kataware was built with [Claude Code](https://claude.com/claude-code), Anthropic's AI coding tool.
