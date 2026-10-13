@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/icon.png" width="160" alt="Kataware icon"></p>
+
 # Kataware（かたわれ）
 
 [日本語](#日本語) | [English](#english)
@@ -5,6 +7,10 @@
 Windows / Mac 対応の Bluetooth 機器バッテリー残量表示アプリ。分割キーボードは左右それぞれの残量を同時に表示します。
 
 Battery level monitor for Bluetooth devices on Windows and Mac. Shows both halves of split keyboards at once.
+
+> アイコンは、一対の「片割れ」を表す家紋「二つ巴」に、七宝文様を織り込み、あえて途切れさせた金の輪（破れ）を重ねたものです。
+>
+> The icon is a *futatsu-domoe* — two interlocking commas, a pair of "kataware" (halves) — woven with the *shippo* pattern and framed by a deliberately broken gold ring.
 
 ---
 
