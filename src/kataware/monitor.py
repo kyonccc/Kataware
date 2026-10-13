@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Callable
 
 from .backends import Backend, BackendUnavailable, create_backend
 from .config import SettingsStore
-from .models import DeviceBattery, LabeledLevel, SIDE_LEFT, label_cells
+from .models import BatteryCell, DeviceBattery, LabeledLevel, SIDE_LEFT, label_cells
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +36,45 @@ class MonitorState:
         self.last_poll: float | None = None
         self._alerted: set[tuple[str, str]] = set()
         self.lock = threading.RLock()
+        # Last known values survive restarts so a sleeping mouse or a keyboard
+        # that is switched off still shows where its battery was.
+        self.cache_path = store.path.with_name("devices.json")
+        self._load_cache()
+
+    def _load_cache(self) -> None:
+        try:
+            data = json.loads(self.cache_path.read_text(encoding="utf-8"))
+            for d in data:
+                cells = [BatteryCell(**c) for c in d.get("cells", [])]
+                if not cells:
+                    continue
+                self.devices[d["device_id"]] = DeviceBattery(
+                    device_id=d["device_id"], name=d["name"], cells=cells, connected=False,
+                    updated_at=float(d.get("updated_at", 0)))
+        except FileNotFoundError:
+            pass
+        except Exception:
+            log.exception("前回の機器情報を読み込めませんでした")
+
+    def _save_cache(self) -> None:
+        try:
+            data = [{"device_id": d.device_id, "name": d.name, "updated_at": d.updated_at,
+                     "cells": [asdict(c) for c in d.cells]} for d in self.devices.values() if d.cells]
+            tmp = self.cache_path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+            os.replace(tmp, self.cache_path)
+        except Exception:
+            log.exception("機器情報を保存できませんでした")
+
+    def forget_disconnected(self) -> None:
+        with self.lock:
+            for dev_id in [k for k, d in self.devices.items() if not d.connected]:
+                del self.devices[dev_id]
+            self._save_cache()
+
+    def has_disconnected(self) -> bool:
+        with self.lock:
+            return any(not d.connected for d in self.devices.values())
 
     def central_side(self, device_id: str) -> str:
         return self.store.settings.central_side.get(device_id, SIDE_LEFT)
@@ -59,6 +100,7 @@ class MonitorState:
                     dev.error = ""
             self.last_poll = time.time()
             self.status = "" if readings else "バッテリー情報を持つ Bluetooth 機器が接続されていません"
+            self._save_cache()
             return self._alerts()
 
     def set_unavailable(self, message: str) -> None:
@@ -112,9 +154,28 @@ class Monitor(threading.Thread):
         self.backend: Backend | None = None
         self.polls = 0
         self.ok = False
+        self._change_timer: threading.Timer | None = None
+        self._change_lock = threading.Lock()
 
     def refresh(self) -> None:
         self._wake.set()
+
+    def notify_change(self, delay: float = 3.0) -> None:
+        """A device connected or disconnected: read again shortly (the short
+        delay lets the connection settle and merges bursts of events)."""
+        with self._change_lock:
+            if self._change_timer is not None:
+                return
+            timer = threading.Timer(delay, self._fire_change)
+            timer.daemon = True
+            self._change_timer = timer
+            timer.start()
+
+    def _fire_change(self) -> None:
+        with self._change_lock:
+            self._change_timer = None
+        log.info("機器の接続・切断を検知したので更新します")
+        self.refresh()
 
     def stop(self) -> None:
         self._stopping.set()
@@ -126,6 +187,10 @@ class Monitor(threading.Thread):
             if self.backend is None:
                 self.backend = self.factory()
                 log.info("Bluetooth バックエンド: %s", self.backend.name)
+                try:
+                    self.backend.start_watching(self.notify_change)
+                except Exception:
+                    log.exception("接続状態の監視を開始できません")
             readings = self.backend.read_all()
             log.info("読み取り結果: %s", [(d.name, [c.level for c in d.cells], d.error) for d in readings])
             alerts = self.state.apply(readings)

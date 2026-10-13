@@ -61,8 +61,47 @@ class WindowsBackend(Backend):
         self.enum = enum
         self.loop = asyncio.new_event_loop()
         self._skipped: dict[str, str] = {}
+        self._watchers: list = []
+
+    def start_watching(self, on_change) -> None:
+        """Watch paired Bluetooth (LE and Classic) devices for connect /
+        disconnect so a sleeping mouse that wakes up shows up immediately."""
+        bt, enum = self.bt, self.enum
+        connected_key = "System.Devices.Aep.IsConnected"
+        for selector_cls in (bt.BluetoothLEDevice, bt.BluetoothDevice):
+            try:
+                watcher = enum.DeviceInformation.create_watcher_with_kind_aqs_filter_and_additional_properties(
+                    selector_cls.get_device_selector_from_pairing_state(True), [connected_key],
+                    enum.DeviceInformationKind.ASSOCIATION_ENDPOINT)
+                ready = {"done": False}
+
+                def on_completed(_sender, _args, ready=ready):
+                    ready["done"] = True
+
+                def on_updated(_sender, update, ready=ready):
+                    try:
+                        if ready["done"] and update is not None and connected_key in update.properties:
+                            on_change()
+                    except Exception:
+                        log.debug("接続変化の処理に失敗", exc_info=True)
+
+                watcher.add_enumeration_completed(on_completed)
+                watcher.add_updated(on_updated)
+                watcher.add_added(lambda _s, _i, ready=ready: ready["done"] and on_change())
+                watcher.start()
+                self._watchers.append(watcher)
+            except Exception as e:
+                log.warning("接続状態の監視を開始できません: %r", e)
+        if self._watchers:
+            log.info("Bluetooth 機器の接続・切断を監視しています")
 
     def close(self) -> None:
+        for w in self._watchers:
+            try:
+                w.stop()
+            except Exception:
+                pass
+        self._watchers.clear()
         try:
             self.loop.close()
         except Exception:
@@ -83,7 +122,10 @@ class WindowsBackend(Backend):
             gatt.GattCharacteristic: ["read_value_with_cache_mode_async", "user_description",
                                       "attribute_handle", "get_descriptors_for_uuid_with_cache_mode_async"],
             gatt.GattDescriptor: ["read_value_with_cache_mode_async"],
+            enum.DeviceWatcher: ["start", "stop", "add_updated", "add_added", "add_enumeration_completed"],
+            enum.DeviceInformationUpdate: ["properties", "id"],
             enum.DeviceInformation: ["find_all_async_aqs_filter",
+                                     "create_watcher_with_kind_aqs_filter_and_additional_properties",
                                      "find_all_async_with_kind_aqs_filter_and_additional_properties",
                                      "properties", "id", "name"],
             bt.BluetoothDevice: ["from_bluetooth_address_async", "connection_status", "name", "close"],
@@ -92,7 +134,7 @@ class WindowsBackend(Backend):
                    for name in names if not hasattr(cls, name)]
         if missing:
             raise AttributeError(f"WinRT API が見つかりません: {missing}")
-        _ = (enum.DeviceInformationKind.DEVICE, bt.BluetoothCacheMode.CACHED, bt.BluetoothCacheMode.UNCACHED,
+        _ = (enum.DeviceInformationKind.DEVICE, enum.DeviceInformationKind.ASSOCIATION_ENDPOINT, bt.BluetoothCacheMode.CACHED, bt.BluetoothCacheMode.UNCACHED,
              bt.BluetoothConnectionStatus.CONNECTED, gatt.GattCommunicationStatus.SUCCESS)
 
         async def enumerate_paired():
@@ -103,7 +145,10 @@ class WindowsBackend(Backend):
         async def windows_battery():
             return [d.name for d in await self._read_windows_battery(set(), {})]
 
-        return {"paired_le_devices": self.loop.run_until_complete(enumerate_paired()),
+        self.start_watching(lambda: None)
+        watching = len(self._watchers)
+        return {"watchers": watching,
+                "paired_le_devices": self.loop.run_until_complete(enumerate_paired()),
                 "windows_battery_devices": self.loop.run_until_complete(windows_battery()),
                 "windows_battery_query": getattr(self, "query_mode", "")}
 

@@ -1,6 +1,6 @@
 [project]
 name = "kataware"
-version = "1.2.1"
+version = "1.3.0"
 description = "Bluetooth battery monitor for Windows / macOS that shows both halves of split keyboards"
 requires-python = ">=3.10"
 license = { text = "MIT" }

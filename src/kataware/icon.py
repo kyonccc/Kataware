@@ -65,10 +65,14 @@ def render_icon(levels: list[LabeledLevel], style: str = "numbers", low: int = 2
     img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
 
-    if not levels or not connected:
+    if not levels:
         d.rounded_rectangle((2, 2, SIZE - 3, SIZE - 3), radius=12, fill=DARK)
-        _centered(d, "BT" if not levels else "×", (6, 6, SIZE - 6, SIZE - 6), GRAY, 40)
+        _centered(d, "BT", (6, 6, SIZE - 6, SIZE - 6), GRAY, 40)
         return img
+
+    # A disconnected (e.g. sleeping) device keeps its last values, in gray.
+    def color(level):
+        return level_color(level, low) if connected else GRAY
 
     shown = levels[:2]
     if style == "bars":
@@ -88,13 +92,13 @@ def render_icon(levels: list[LabeledLevel], style: str = "numbers", low: int = 2
                 inner_h = bottom - top - 8
                 h = max(2, round(inner_h * lv.level / 100))
                 d.rounded_rectangle((x0 + 4, bottom - 4 - h, x1 - 4, bottom - 4), radius=3,
-                                    fill=level_color(lv.level, low))
+                                    fill=color(lv.level))
         return img
 
     # numbers: one row per battery on a dark rounded background
     d.rounded_rectangle((0, 0, SIZE - 1, SIZE - 1), radius=12, fill=DARK)
     if len(shown) == 1:
-        _centered(d, _num(shown[0].level), (3, 6, SIZE - 3, SIZE - 6), level_color(shown[0].level, low), 44)
+        _centered(d, _num(shown[0].level), (3, 6, SIZE - 3, SIZE - 6), color(shown[0].level), 44)
         return img
     row_h = SIZE // 2
     for i, lv in enumerate(shown):
@@ -102,5 +106,5 @@ def render_icon(levels: list[LabeledLevel], style: str = "numbers", low: int = 2
         label_w = 16
         _centered(d, lv.short or "?", (2, y0 + 4, 2 + label_w, y0 + row_h - 4), WHITE, 22)
         _centered(d, _num(lv.level), (label_w + 2, y0 + 2, SIZE - 2, y0 + row_h - 2),
-                  level_color(lv.level, low), 32)
+                  color(lv.level), 32)
     return img

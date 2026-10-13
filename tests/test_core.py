@@ -149,3 +149,39 @@ def test_parse_bt_address_from_pnp_ids():
     assert parse_bt_address(r"BTHENUM\{0000110e-0000-1000-8000-00805f9b34fb}_LOCALMFG&005d\7&2C&0&001122334455_C00000000") == 0x001122334455
     assert parse_bt_address(r"USB\VID_046D&PID_C52B\5&1") is None
     assert _unbox_level(95) == 95 and _unbox_level(None) is None and _unbox_level(255) is None
+
+
+def test_last_values_survive_restart_and_can_be_forgotten(tmp_path):
+    store = SettingsStore(tmp_path / "config.json")
+    state = MonitorState(store)
+    state.apply([zmk(70, 60), DeviceBattery("m", "mouse", [BatteryCell(42, "", 1)])])
+    state.apply([zmk(70, 60)])  # mouse went to sleep
+    assert not state.devices["m"].connected and state.devices["m"].cells[0].level == 42
+
+    again = MonitorState(SettingsStore(tmp_path / "config.json"))  # app restarted
+    assert set(again.devices) == {"kb", "m"}
+    assert not again.devices["kb"].connected and [c.level for c in again.devices["kb"].cells] == [60, 70]
+    again.apply([zmk(71, 61)])
+    assert again.devices["kb"].connected and not again.devices["m"].connected
+    assert again.has_disconnected()
+    again.forget_disconnected()
+    assert set(again.devices) == {"kb"} and not again.has_disconnected()
+    assert set(MonitorState(SettingsStore(tmp_path / "config.json")).devices) == {"kb"}
+
+
+def test_disconnected_icon_is_gray(tmp_path):
+    from kataware.icon import GRAY
+
+    img = render_icon(label_cells(zmk(90, 90)), "bars", connected=False)
+    assert GRAY in [img.getpixel((x, 50)) for x in range(64)]
+
+
+def test_connection_events_trigger_one_debounced_refresh(tmp_path):
+    import time as _t
+
+    state = MonitorState(SettingsStore(tmp_path / "c.json"))
+    m = Monitor(state, lambda alerts: None, backend_factory=DemoBackend)
+    for _ in range(5):
+        m.notify_change(delay=0.05)
+    _t.sleep(0.2)
+    assert m._wake.is_set() and m._change_timer is None

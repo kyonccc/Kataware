@@ -30,6 +30,10 @@ class Backend:
     def close(self) -> None:
         pass
 
+    def start_watching(self, on_change) -> None:
+        """Call ``on_change()`` (from any thread) when a device connects or
+        disconnects, so the UI can refresh right away. Optional."""
+
     def probe(self) -> dict:
         """Exercise the OS API surface without needing a radio (used by --self-test)."""
         return {}

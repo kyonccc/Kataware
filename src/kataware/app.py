@@ -27,6 +27,11 @@ POLL_CHOICES = [1, 5, 15, 30]
 THRESHOLD_CHOICES = [0, 10, 20, 30]
 
 
+def _when(ts: float) -> str:
+    t = time.localtime(ts)
+    return time.strftime("%H:%M" if time.strftime("%Y%m%d", t) == time.strftime("%Y%m%d") else "%m/%d %H:%M", t)
+
+
 def _on_main_thread(fn):
     """Run ``fn`` on the UI thread (required by AppKit on macOS)."""
     if sys.platform == "darwin":
@@ -142,7 +147,7 @@ class TrayApp:
             yield Item("読み取り中…", None, enabled=False)
 
         for dev in devices:
-            header = dev.name if dev.connected else f"{dev.name}（未接続）"
+            header = dev.name if dev.connected else f"{dev.name}（未接続・{_when(dev.updated_at)} の値）"
             yield Item(header, None, enabled=False)
             for lv in self.state.labeled(dev):
                 yield Item(f"    {lv.label}: {format_level(lv.level)}", None, enabled=False)
@@ -184,6 +189,8 @@ class TrayApp:
         ]))
         if autostart_supported():
             yield Item("ログイン時に起動", self._toggle_autostart, checked=lambda _: autostart_enabled())
+        if self.state.has_disconnected():
+            yield Item("未接続の機器を一覧から消す", self._forget_disconnected)
         yield Item("ログを開く", lambda *_: open_path(log_path()))
         yield Menu.SEPARATOR
         yield Item(f"{APP_NAME} v{__version__}", None, enabled=False)
@@ -237,6 +244,10 @@ class TrayApp:
 
     def _is_threshold(self, t):
         return lambda _: self.store.settings.low_threshold == t
+
+    def _forget_disconnected(self, *_):
+        self.state.forget_disconnected()
+        _on_main_thread(self._refresh_ui)
 
     def _toggle_autostart(self, *_):
         set_autostart(not autostart_enabled())

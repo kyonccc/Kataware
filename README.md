@@ -26,6 +26,7 @@ Battery level monitor for Bluetooth devices on Windows and Mac. Shows both halve
 - Windows はタスクトレイ（通知領域）、Mac はメニューバーに常駐（ウィンドウは開きません）
 - アイコンに残量を数字またはバーで表示、クリックで機器ごとの詳細
 - 残量が少なくなったら通知（10% / 20% / 30% / オフ）
+- 機器がつながった・切れた瞬間に表示を更新（Windows）。スリープ中のマウスや電源を切ったキーボードも、最後に読めた値をグレーで残します
 - 設定・ログはこの PC の中だけに保存し、外部への通信は一切しません
 
 ### 対応機器
@@ -108,10 +109,15 @@ moNa2
 アイコンの表示形式      ▶  数字 / バー
 更新間隔                ▶  1 / 5 / 15 / 30 分
 残量低下の通知          ▶
+未接続の機器を一覧から消す
 ログイン時に起動
 ログを開く
 終了
 ```
+
+- 未接続の機器（スリープ中のマウスなど）は「mouse（未接続・23:25 の値）」のように最後の値を表示します。アプリを再起動しても残ります。
+  不要になった機器は **未接続の機器を一覧から消す** で消せます
+- 残量は「更新間隔」ごとに読み取ります。Windows では機器がつながった・切れた時にもすぐ読み直します
 
 #### 左右が逆に表示されるとき
 
@@ -158,6 +164,7 @@ CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_PROXY=y
 - Lives in the Windows system tray / macOS menu bar (no window)
 - Tray icon shows the levels as numbers or bars; click for per-device details
 - Low battery notifications (10% / 20% / 30% / off)
+- Refreshes as soon as a device connects or disconnects (Windows); sleeping / switched-off devices keep their last value, shown in gray
 - Settings and logs stay on your computer; the app never talks to the internet
 
 ### Supported devices
