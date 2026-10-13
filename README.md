@@ -48,6 +48,18 @@ Bluetooth LE の標準「Battery Service」で残量を公開している機器�
 3. **ウィンドウは開きません。** 通知領域（右下の `^` の中）にアイコンが出ます（初回は「起動しました」の通知が出ます）。
    常に見えるようにするには、アイコンをタスクバーへドラッグしてください
 
+#### タスクバーにピン留めして起動したい場合（Windows）
+
+ダウンロードした .exe をそのままピン留めすると、「アプリケーション制御ポリシーによってこのファイルがブロックされました」と出て起動できないことがあります。
+Windows がインターネットから来たファイルに付ける印（Mark of the Web）が原因です。
+
+1. ピン留めを外す
+2. `Kataware-Windows-x64.exe` を右クリック → プロパティ → 「全般」タブ下部の **許可する** にチェック → OK
+   （PowerShell なら `Unblock-File .\Kataware-Windows-x64.exe`）
+3. もう一度タスクバーにピン留め
+
+ピン留めしなくても、メニューの **ログイン時に起動** を有効にすれば PC 起動時に自動で常駐します。
+
 #### Mac の初回起動
 
 1. zip を展開して `Kataware.app` を「アプリケーション」フォルダへ移動
@@ -150,6 +162,12 @@ Get the file for your OS from the **Assets** of the [latest release](https://git
 1. Put `Kataware-Windows-x64.exe` somewhere permanent and double-click it
 2. If "Windows protected your PC" appears, click **More info → Run anyway** (the app is not code-signed)
 3. **No window opens.** The icon appears in the notification area (inside `^` at the bottom right). Drag it onto the taskbar to keep it visible
+
+#### Pinning to the taskbar (Windows)
+
+If a pinned shortcut fails with "This file was blocked by your organization's application control policy", Windows is blocking the downloaded file (Mark of the Web).
+Unpin it, right-click `Kataware-Windows-x64.exe` → Properties → check **Unblock** → OK (or run `Unblock-File .\Kataware-Windows-x64.exe` in PowerShell), then pin it again.
+You can also just enable **launch at login** (ログイン時に起動) in the menu instead of pinning.
 
 #### First launch on Mac
 
