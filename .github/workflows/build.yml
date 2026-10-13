@@ -1,0 +1,137 @@
+name: Build, test & release
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows-x64
+          - os: macos-14
+            label: macOS-AppleSilicon
+          - os: macos-15-intel
+            label: macOS-Intel
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ".[dev]"
+
+      - name: Unit tests
+        run: python -m pytest -q
+
+      - name: Build app
+        run: |
+          python packaging/make_icons.py
+          pyinstaller --noconfirm packaging/kataware.spec
+
+      - name: Self-test packaged app (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:KATAWARE_HOME = "$PWD\selftest-home"
+          $p = Start-Process -FilePath "dist\Kataware.exe" -ArgumentList "--self-test","$PWD\selftest-report.json" -Wait -PassThru
+          Get-Content selftest-report.json
+          if ($p.ExitCode -ne 0) { Get-Content "$env:KATAWARE_HOME\kataware.log"; exit 1 }
+
+      - name: Self-test packaged app (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          export KATAWARE_HOME="$PWD/selftest-home"
+          set +e
+          dist/Kataware.app/Contents/MacOS/Kataware --self-test "$PWD/selftest-report.json"
+          code=$?
+          set -e
+          cat selftest-report.json || true
+          if [ $code -ne 0 ]; then cat "$KATAWARE_HOME/kataware.log" || true; exit 1; fi
+          plutil -p dist/Kataware.app/Contents/Info.plist | grep -E "NSBluetoothAlwaysUsageDescription|LSUIElement"
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item dist\Kataware.exe "out\Kataware-${{ matrix.label }}.exe"
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p out
+          ditto -c -k --sequesterRsrc --keepParent dist/Kataware.app "out/Kataware-${{ matrix.label }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kataware-${{ matrix.label }}
+          path: out/*
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selftest-${{ matrix.label }}
+          path: |
+            selftest-report.json
+            selftest-home/kataware.log
+          if-no-files-found: ignore
+
+  release:
+    needs: build
+    # Release on a v* tag, or on a push whose commit message contains [release]
+    # (the tag is then created from the version in src/kataware/__init__.py).
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[release]'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Determine tag
+        id: tag
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "name=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          else
+            v=$(python3 -c "import re;print(re.search(r'__version__ = \"(.+?)\"', open('src/kataware/__init__.py').read()).group(1))")
+            echo "name=v$v" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Kataware-*
+          path: release
+          merge-multiple: true
+      - run: ls -la release
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          target_commitish: ${{ github.sha }}
+          name: Kataware ${{ steps.tag.outputs.name }}
+          make_latest: true
+          files: release/*
+          generate_release_notes: true
+          body: |
+            ## ダウンロード / Download
+            | OS | ファイル / File |
+            | --- | --- |
+            | Windows 10 / 11 (64bit) | `Kataware-Windows-x64.exe` |
+            | Mac (Apple シリコン / Apple silicon) | `Kataware-macOS-AppleSilicon.zip` |
+            | Mac (Intel) | `Kataware-macOS-Intel.zip` |
+
+            使い方・初回起動時の注意は [README](https://github.com/kyonccc/Kataware#readme) を参照してください。
+            See the [README](https://github.com/kyonccc/Kataware#readme) for usage and first-launch notes.

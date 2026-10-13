@@ -1,0 +1,38 @@
+[project]
+name = "kataware"
+version = "1.0.0"
+description = "Bluetooth battery monitor for Windows / macOS that shows both halves of split keyboards"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+  "pystray>=0.19.5",
+  "Pillow>=10.1",
+  "winrt-runtime>=3.2; sys_platform == 'win32'",
+  "winrt-Windows.Devices.Bluetooth>=3.2; sys_platform == 'win32'",
+  "winrt-Windows.Devices.Bluetooth.GenericAttributeProfile>=3.2; sys_platform == 'win32'",
+  "winrt-Windows.Devices.Enumeration>=3.2; sys_platform == 'win32'",
+  "winrt-Windows.Foundation>=3.2; sys_platform == 'win32'",
+  "winrt-Windows.Foundation.Collections>=3.2; sys_platform == 'win32'",
+  "winrt-Windows.Storage.Streams>=3.2; sys_platform == 'win32'",
+  "pyobjc-core>=10; sys_platform == 'darwin'",
+  "pyobjc-framework-Cocoa>=10; sys_platform == 'darwin'",
+  "pyobjc-framework-CoreBluetooth>=10; sys_platform == 'darwin'",
+  "pyobjc-framework-libdispatch>=10; sys_platform == 'darwin'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pyinstaller>=6.10"]
+
+[project.scripts]
+kataware = "kataware.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
