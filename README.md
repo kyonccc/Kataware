@@ -81,18 +81,6 @@ OneDrive の同期対象にならず、普通のアプリもよく入ってい�
 残量は「^」を開けばいつでも確認でき、残量低下の通知も届きます。
 （逆にオンにすると、タスクバーに常に表示されます）
 
-#### タスクバーにピン留めして起動したい場合（Windows）
-
-ダウンロードした .exe をそのままピン留めすると、「アプリケーション制御ポリシーによってこのファイルがブロックされました」と出て起動できないことがあります。
-Windows がインターネットから来たファイルに付ける印（Mark of the Web）が原因です。
-
-1. ピン留めを外す
-2. `Kataware-Windows-x64.exe` を右クリック → プロパティ → 「全般」タブ下部の **許可する** にチェック → OK
-   （PowerShell なら `Unblock-File .\Kataware-Windows-x64.exe`）
-3. もう一度タスクバーにピン留め
-
-ピン留めしなくても、メニューの **ログイン時に起動** を有効にすれば PC 起動時に自動で常駐します。
-
 #### Mac の初回起動
 
 1. zip を展開して `Kataware.app` を「アプリケーション」フォルダへ移動
@@ -202,12 +190,6 @@ Store the app in `%LOCALAPPDATA%\Programs\Kataware\Kataware-Windows-x64.exe` (no
 quit the app, type `%LOCALAPPDATA%\Programs` in the Explorer address bar, create a `Kataware` folder, move the .exe there,
 right-click it → Properties → **Unblock**, launch it once and enable **launch at login** (ログイン時に起動) in the menu.
 To hide the tray icon as well: Settings → Personalization → Taskbar → **Other system tray icons** → turn Kataware off (it stays available under `^`).
-
-#### Pinning to the taskbar (Windows)
-
-If a pinned shortcut fails with "This file was blocked by your organization's application control policy", Windows is blocking the downloaded file (Mark of the Web).
-Unpin it, right-click `Kataware-Windows-x64.exe` → Properties → check **Unblock** → OK (or run `Unblock-File .\Kataware-Windows-x64.exe` in PowerShell), then pin it again.
-You can also just enable **launch at login** (ログイン時に起動) in the menu instead of pinning.
 
 #### First launch on Mac
 
