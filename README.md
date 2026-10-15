@@ -144,6 +144,14 @@ CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_PROXY=y
 
 書き込み後は、PC / Mac の Bluetooth 設定でキーボードを一度削除してから再ペアリングしてください（機器情報が PC 側にキャッシュされているため）。
 
+#### 片側（ペリフェラル）の残量がなかなか減らないとき
+
+故障ではなく正常です。分割キーボードのセントラル（PC とつながる側）は、PC との通信と左右のまとめ役を担うため電池を多く使いますが、
+ペリフェラル側はキー入力を送るだけなので消費がずっと少なく、何日も同じ数値のままになることがあります。
+また残量は電圧から計算しており、90% 前後は電圧の変化がとても緩やかなため数値が動きにくい区間です。
+
+読み取りが正しいか確かめたいときは、その側に USB をつないで 5〜10 分充電し、メニューの **今すぐ更新** を押してください。数値が上がれば正常です。
+
 ### しくみ
 
 - 機器の Battery Service (0x180F) にある **Battery Level 特性 (0x2A19) をすべて** 読み取ります。
@@ -240,6 +248,11 @@ Add the following to your zmk-config `.conf`, reflash, then remove and re-pair t
 CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING=y
 CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_PROXY=y
 ```
+
+#### The peripheral half barely drops
+
+That is normal. The central half talks to the computer and relays the other half, so it uses much more power; the peripheral only sends key presses and can stay at the same level for days. Levels are derived from battery voltage, which changes very little around 90%.
+To check the reading, charge that half over USB for 5–10 minutes and choose **今すぐ更新 (refresh)** — the level should go up.
 
 ### How it works
 
