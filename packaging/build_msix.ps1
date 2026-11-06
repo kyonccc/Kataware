@@ -24,11 +24,13 @@ if (-not $Version) {
     $Version = "$($Matches[1]).$($Matches[2]).$($Matches[3]).0"   # MSIX needs four parts
 }
 
-$kits = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.*\x64" -Directory |
-        Sort-Object Name -Descending | Select-Object -First 1
-if (-not $kits) { throw "Windows SDK (makeappx.exe) not found" }
-$makeappx = Join-Path $kits.FullName "makeappx.exe"
-$signtool = Join-Path $kits.FullName "signtool.exe"
+# Newest Windows SDK that actually contains makeappx.exe (bin\<version>\x64\makeappx.exe)
+$tool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.*\x64\makeappx.exe" -ErrorAction SilentlyContinue |
+        Sort-Object { [version]$_.Directory.Parent.Name } -Descending | Select-Object -First 1
+if (-not $tool) { throw "Windows SDK (makeappx.exe) not found" }
+$makeappx = $tool.FullName
+$signtool = Join-Path $tool.DirectoryName "signtool.exe"
+Write-Host "Using $makeappx"
 
 $stage = Join-Path ([System.IO.Path]::GetTempPath()) ("kataware-msix-" + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $stage | Out-Null
