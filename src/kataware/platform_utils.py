@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from .config import APP_ID, APP_NAME
+from .winpkg import is_packaged
 
 log = logging.getLogger(__name__)
 
@@ -88,6 +89,10 @@ def autostart_supported() -> bool:
 
 
 def autostart_enabled() -> bool:
+    if sys.platform == "win32" and is_packaged():
+        from .winpkg import startup_state
+
+        return startup_state() in ("enabled", "enabled_by_policy")
     try:
         if sys.platform == "win32":
             import winreg
@@ -103,6 +108,9 @@ def autostart_enabled() -> bool:
 
 
 def set_autostart(enabled: bool) -> None:
+    if sys.platform == "win32" and is_packaged():
+        _set_package_autostart(enabled)
+        return
     cmd = launch_command()
     try:
         if sys.platform == "win32":
@@ -128,6 +136,21 @@ def set_autostart(enabled: bool) -> None:
                 path.unlink(missing_ok=True)
     except Exception:
         log.exception("ログイン時起動の設定に失敗しました")
+
+
+def _set_package_autostart(enabled: bool) -> None:
+    """Microsoft Store build: the StartupTask declared in the package manifest."""
+    from .winpkg import set_startup
+
+    state = set_startup(enabled)
+    log.info("スタートアップ タスク: %s", state)
+    if enabled and state == "disabled_by_user":
+        show_message(APP_NAME, "Windows の設定で Kataware の自動起動がオフになっています。\n"
+                               "設定 → アプリ → スタートアップ で Kataware をオンにしてください。")
+    elif enabled and state == "disabled_by_policy":
+        show_message(APP_NAME, "この PC の管理者の設定により、自動起動を有効にできません。")
+    elif state == "unavailable":
+        show_message(APP_NAME, "自動起動の設定を変更できませんでした。ログを確認してください。", error=True)
 
 
 def _registered_command() -> list[str] | None:
@@ -157,8 +180,8 @@ def refresh_autostart_path() -> bool:
     used to silently break launch at login. Re-register on every start of a
     packaged build if the path changed. Returns True when it was rewritten.
     """
-    if not is_frozen():
-        return False
+    if not is_frozen() or (sys.platform == "win32" and is_packaged()):
+        return False  # the Store build's StartupTask has no path to follow
     registered = _registered_command()
     if registered is None or registered == launch_command():
         return False
@@ -176,6 +199,10 @@ _OLD_ID = "io.github.kyonccc.splitbattery"
 def migrate_from_old_name() -> None:
     """Carry settings over from SplitBattery and replace its login item."""
     from .config import app_dir
+
+    if sys.platform == "win32" and is_packaged():
+        _migrate_into_package()
+        return
 
     try:
         new_cfg = app_dir() / "config.json"
@@ -209,3 +236,27 @@ def migrate_from_old_name() -> None:
     if had_old_autostart:
         log.info("SplitBattery のログイン時起動を Kataware に置き換えました")
         set_autostart(True)
+
+
+def _migrate_into_package() -> None:
+    """First start of the Microsoft Store build: take over the settings and
+    last known values of the GitHub build (or of SplitBattery). The registry
+    is private to the package, so the GitHub build's own login item cannot be
+    removed from here; the README asks users to turn it off before switching."""
+    from .config import app_dir
+
+    appdata = Path(os.environ.get("APPDATA", Path.home()))
+    target = app_dir()
+    for name in ("config.json", "devices.json"):
+        dst = target / name
+        if dst.exists():
+            continue
+        for src_dir in (appdata / APP_NAME, appdata / _OLD_NAME):
+            src = src_dir / name
+            try:
+                if src.exists():
+                    dst.write_bytes(src.read_bytes())
+                    log.info("%s を %s から引き継ぎました", name, src_dir)
+                    break
+            except Exception:
+                log.exception("%s の引き継ぎに失敗しました", src)

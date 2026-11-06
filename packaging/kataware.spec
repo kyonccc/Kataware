@@ -1,4 +1,10 @@
 # PyInstaller spec for Kataware (Windows .exe / macOS .app)
+#
+# Windows builds a single .exe for GitHub releases by default. With
+# KATAWARE_ONEDIR=1 it builds a folder instead (Kataware.exe + _internal), which
+# is what goes into the Microsoft Store (MSIX) package: no self-extraction to
+# %TEMP% and no second process at start-up.
+import os
 import sys
 from pathlib import Path
 
@@ -25,7 +31,17 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
-if sys.platform == "win32":
+if sys.platform == "win32" and os.environ.get("KATAWARE_ONEDIR") == "1":
+    exe = EXE(
+        pyz, a.scripts, [],
+        exclude_binaries=True,
+        name="Kataware",
+        console=False,
+        upx=False,
+        icon=str(ICONS / "app.ico"),
+    )
+    coll = COLLECT(exe, a.binaries, a.datas, name="Kataware", upx=False)
+elif sys.platform == "win32":
     exe = EXE(
         pyz, a.scripts, a.binaries, a.datas, [],
         name="Kataware",

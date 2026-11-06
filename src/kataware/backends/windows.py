@@ -40,6 +40,16 @@ def parse_bt_address(instance_id: str) -> int | None:
     return int(m.group(1) or m.group(2), 16)
 
 
+_LE_ID_RE = re.compile(r"-([0-9a-f]{2}(?::[0-9a-f]{2}){5})$", re.IGNORECASE)
+
+
+def parse_le_id_address(device_id: str) -> int | None:
+    """Bluetooth address from a BluetoothLEDevice id such as
+    BluetoothLE#BluetoothLE00:1a:7d:da:71:13-c8:2f:6b:10:aa:01."""
+    m = _LE_ID_RE.search(device_id or "")
+    return int(m.group(1).replace(":", ""), 16) if m else None
+
+
 class WindowsBackend(Backend):
     name = "windows"
 
@@ -62,11 +72,14 @@ class WindowsBackend(Backend):
         self.loop = asyncio.new_event_loop()
         self._skipped: dict[str, str] = {}
         self._watchers: list = []
+        self._on_change = None
+        self.query_mode = ""
 
     def start_watching(self, on_change) -> None:
         """Watch paired Bluetooth (LE and Classic) devices for connect /
         disconnect so a sleeping mouse that wakes up shows up immediately."""
         bt, enum = self.bt, self.enum
+        self._on_change = on_change
         connected_key = "System.Devices.Aep.IsConnected"
         for selector_cls in (bt.BluetoothLEDevice, bt.BluetoothDevice):
             try:
@@ -95,19 +108,38 @@ class WindowsBackend(Backend):
         if self._watchers:
             log.info("Bluetooth 機器の接続・切断を監視しています")
 
-    def close(self) -> None:
+    def _ensure_watching(self) -> None:
+        """Bluetooth being switched off / on or sleep and resume can stop the
+        watchers for good; restart them so instant refresh keeps working."""
+        if self._on_change is None:
+            return
+        dead = (self.enum.DeviceWatcherStatus.STOPPED, self.enum.DeviceWatcherStatus.ABORTED)
+        try:
+            if self._watchers and not any(w.status in dead for w in self._watchers):
+                return
+        except Exception:
+            pass
+        log.info("接続状態の監視を再開します")
+        self._stop_watchers()
+        self.start_watching(self._on_change)
+
+    def _stop_watchers(self) -> None:
         for w in self._watchers:
             try:
                 w.stop()
             except Exception:
                 pass
         self._watchers.clear()
+
+    def close(self) -> None:
+        self._stop_watchers()
         try:
             self.loop.close()
         except Exception:
             pass
 
     def read_all(self) -> list[DeviceBattery]:
+        self._ensure_watching()
         return self.loop.run_until_complete(self._read_all())
 
     def probe(self) -> dict:
@@ -122,7 +154,7 @@ class WindowsBackend(Backend):
             gatt.GattCharacteristic: ["read_value_with_cache_mode_async", "user_description",
                                       "attribute_handle", "get_descriptors_for_uuid_with_cache_mode_async"],
             gatt.GattDescriptor: ["read_value_with_cache_mode_async"],
-            enum.DeviceWatcher: ["start", "stop", "add_updated", "add_added", "add_enumeration_completed"],
+            enum.DeviceWatcher: ["start", "stop", "status", "add_updated", "add_added", "add_enumeration_completed"],
             enum.DeviceInformationUpdate: ["properties", "id"],
             enum.DeviceInformation: ["find_all_async_aqs_filter",
                                      "create_watcher_with_kind_aqs_filter_and_additional_properties",
@@ -134,7 +166,7 @@ class WindowsBackend(Backend):
                    for name in names if not hasattr(cls, name)]
         if missing:
             raise AttributeError(f"WinRT API が見つかりません: {missing}")
-        _ = (enum.DeviceInformationKind.DEVICE, enum.DeviceInformationKind.ASSOCIATION_ENDPOINT, bt.BluetoothCacheMode.CACHED, bt.BluetoothCacheMode.UNCACHED,
+        _ = (enum.DeviceWatcherStatus.STOPPED, enum.DeviceWatcherStatus.ABORTED, enum.DeviceInformationKind.DEVICE, enum.DeviceInformationKind.ASSOCIATION_ENDPOINT, bt.BluetoothCacheMode.CACHED, bt.BluetoothCacheMode.UNCACHED,
              bt.BluetoothConnectionStatus.CONNECTED, gatt.GattCommunicationStatus.SUCCESS)
 
         async def enumerate_paired():
@@ -177,6 +209,10 @@ class WindowsBackend(Backend):
                 log.warning("%s の読み取りに失敗: %r", info.name, e)
                 results.append(DeviceBattery(device_id=info.id, name=info.name or "不明なデバイス",
                                              error=_short_error(e)))
+                # Keep the Windows-value fallback from listing it a second time.
+                address = parse_le_id_address(info.id)
+                if address is not None:
+                    gatt_addresses.add(address)
         try:
             for dev in await self._read_windows_battery(gatt_addresses, skipped):
                 results.append(dev)
@@ -196,13 +232,16 @@ class WindowsBackend(Backend):
         bt, enum = self.bt, self.enum
         kind = enum.DeviceInformationKind.DEVICE
         find = enum.DeviceInformation.find_all_async_with_kind_aqs_filter_and_additional_properties
-        try:
-            infos = await self._await(find(f"{WIN_BATTERY_PROP}:<>[]", [WIN_BATTERY_PROP], kind))
-            self.query_mode = "aqs"
-        except Exception as e:  # AQS not accepted: scan every device node instead
-            log.debug("AQS フィルターが使えません (%r)。全デバイスを確認します", e)
+        infos = None
+        if self.query_mode != "scan":
+            try:
+                infos = await self._await(find(f"{WIN_BATTERY_PROP}:<>[]", [WIN_BATTERY_PROP], kind))
+                self.query_mode = "aqs"
+            except Exception as e:  # AQS not accepted here: remember, don't retry every poll
+                log.info("AQS フィルターが使えないため、全デバイスを確認する方式にします (%r)", e)
+                self.query_mode = "scan"
+        if infos is None:
             infos = await self._await(find("", [WIN_BATTERY_PROP], kind), 30)
-            self.query_mode = "scan"
 
         found: dict[int, DeviceBattery] = {}
         for info in infos:

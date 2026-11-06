@@ -22,7 +22,12 @@ def app_dir() -> Path:
     if override:
         base = Path(override)
     elif sys.platform == "win32":
-        base = Path(os.environ.get("APPDATA", Path.home())) / APP_NAME
+        from .winpkg import is_packaged, local_state_dir
+
+        if is_packaged():  # Microsoft Store build: the package's own folder
+            base = local_state_dir()
+        else:
+            base = Path(os.environ.get("APPDATA", Path.home())) / APP_NAME
     elif sys.platform == "darwin":
         base = Path.home() / "Library" / "Application Support" / APP_NAME
     else:

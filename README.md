@@ -27,7 +27,7 @@ Battery level monitor for Bluetooth devices on Windows and Mac. Shows both halve
 - アイコンに残量を数字またはバーで表示、クリックで機器ごとの詳細
 - 残量が少なくなったら通知（10% / 20% / 30% / オフ）
 - 機器がつながった・切れた瞬間に表示を更新（Windows）。スリープ中のマウスや電源を切ったキーボードも、最後に読めた値をグレーで残します
-- 設定・ログはこの PC の中だけに保存し、外部への通信は一切しません
+- 設定・ログはこの PC の中だけに保存し、外部への通信は一切しません（[プライバシーポリシー](PRIVACY.md)）
 
 ### 対応機器
 
@@ -182,7 +182,7 @@ CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_PROXY=y
 - Tray icon shows the levels as numbers or bars; click for per-device details
 - Low battery notifications (10% / 20% / 30% / off)
 - Refreshes as soon as a device connects or disconnects (Windows); sleeping / switched-off devices keep their last value, shown in gray
-- Settings and logs stay on your computer; the app never talks to the internet
+- Settings and logs stay on your computer; the app never talks to the internet ([privacy policy](PRIVACY.md))
 
 ### Supported devices
 
@@ -265,6 +265,16 @@ Settings and logs: `%APPDATA%\Kataware\` (Windows), `~/Library/Application Suppo
 
 ---
 
+## Microsoft Store 版について / Microsoft Store version
+
+Windows 版は Microsoft Store での配布を準備中です。Store 版は Microsoft が署名するため、スマート アプリ コントロールなどに止められず、自動で更新されます。
+
+GitHub 版から Store 版に切り替えるときは、先に GitHub 版のメニューで **ログイン時に起動** のチェックを外してから終了してください
+（Store 版からは GitHub 版の自動起動設定を消せないため）。設定と最後の残量は Store 版の初回起動時に自動で引き継がれます。
+
+A Microsoft Store build for Windows is being prepared (signed by Microsoft, so Smart App Control does not block it, and updated automatically).
+When switching from the GitHub build, first untick **launch at login** in the GitHub build's menu and quit it; settings carry over automatically.
+
 ## 開発者向け / Development
 
 ```bash
@@ -274,6 +284,8 @@ python -m kataware --demo       # run with fake devices (no Bluetooth needed)
 python -m kataware --once       # read once and print raw characteristics
 python packaging/make_icons.py && pyinstaller --noconfirm packaging/kataware.spec   # build
 ```
+
+The Windows job also builds the Microsoft Store package (MSIX, `packaging/build_msix.ps1`): an unsigned package for Partner Center and a self-signed test package, which CI installs and self-tests as a real packaged app. Set the repository variables `MSIX_IDENTITY_NAME`, `MSIX_PUBLISHER` and `MSIX_PUBLISHER_DISPLAY_NAME` to the values shown in Partner Center.
 
 GitHub Actions builds the app on Windows and macOS (Apple silicon / Intel) virtual machines, then runs the unit tests and a self-test of the packaged app (`--self-test`). A release `v<version>` is published only when every platform passes — triggered by a `v*` tag or a push whose commit message contains `[release]`.
 

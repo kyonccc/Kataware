@@ -138,6 +138,21 @@ def self_test(report_path: Path, seconds: float) -> int:
         return {"elapsed": round(elapsed, 1), "polls": app.monitor.polls, "menu": texts,
                 "tooltip": app.icon.title}
 
+    def package():
+        # Microsoft Store build: storage must be the package's LocalState and
+        # the StartupTask from the manifest must be reachable.
+        from . import winpkg
+        from .config import app_dir
+
+        info = {"packaged": winpkg.is_packaged(), "app_dir": str(app_dir())}
+        if info["packaged"]:
+            info["family"] = winpkg.package_family_name()
+            info["startup"] = winpkg.startup_state(force=True)
+            assert info["startup"] != "unavailable", info
+            assert info["app_dir"].endswith("LocalState"), info
+        return info
+
+    step("package", package)
     step("icons", icons)
     step("real_backend", real_backend)
     step("tray", tray)

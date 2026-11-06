@@ -219,6 +219,9 @@ class Monitor(threading.Thread):
 
     def run(self) -> None:
         while not self._stopping.is_set():
+            # Clear before reading: a refresh requested while we read keeps the
+            # event set, so the next wait returns at once instead of losing it.
+            self._wake.clear()
             alerts = self.poll_once()
             try:
                 self.on_update(alerts)
@@ -228,6 +231,5 @@ class Monitor(threading.Thread):
             minutes = self.state.store.settings.poll_minutes
             wait = minutes * 60 if self.ok else 30
             self._wake.wait(wait)
-            self._wake.clear()
         if self.backend is not None:
             self.backend.close()

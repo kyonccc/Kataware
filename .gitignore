@@ -8,3 +8,8 @@ packaging/build-icons/
 .pytest_cache/
 selftest-*/
 selftest-report.json
+dist-onedir/
+build-onedir/
+msix/
+*.msix
+*.pfx

@@ -86,4 +86,14 @@ if __name__ == "__main__":
     img.save(out / "app.png")
     img.save(out / "app.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
     img.save(out / "app.icns")
+
+    # Microsoft Store (MSIX) visual assets
+    msix = out / "msix"
+    msix.mkdir(exist_ok=True)
+    for name, size in (("StoreLogo.png", 50), ("Square44x44Logo.png", 44),
+                       ("Square150x150Logo.png", 150)):
+        img.resize((size, size), Image.LANCZOS).save(msix / name)
+    wide = Image.new("RGBA", (310, 150), (0, 0, 0, 0))
+    wide.alpha_composite(img.resize((140, 140), Image.LANCZOS), (85, 5))
+    wide.save(msix / "Wide310x150Logo.png")
     print("icons written to", out)

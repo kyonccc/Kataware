@@ -185,3 +185,39 @@ def test_connection_events_trigger_one_debounced_refresh(tmp_path):
         m.notify_change(delay=0.05)
     _t.sleep(0.2)
     assert m._wake.is_set() and m._change_timer is None
+
+
+def test_parse_le_device_id_address():
+    from kataware.backends.windows import parse_le_id_address
+
+    assert parse_le_id_address("BluetoothLE#BluetoothLE00:1a:7d:da:71:13-c8:2f:6b:10:aa:01") == 0xC82F6B10AA01
+    assert parse_le_id_address("garbage") is None
+
+
+def test_not_packaged_outside_windows_store():
+    from kataware import winpkg
+
+    assert winpkg.package_family_name() is None and not winpkg.is_packaged()
+    assert winpkg.startup_state() == "unavailable"
+
+
+def test_refresh_requested_during_poll_is_not_lost(tmp_path):
+    import threading
+
+    state = MonitorState(SettingsStore(tmp_path / "c.json"))
+    polls = []
+
+    class Slow(DemoBackend):
+        def read_all(self):
+            polls.append(1)
+            if len(polls) == 1:
+                m.refresh()  # arrives while the first read is still running
+            if len(polls) >= 2:
+                m.stop()
+            return super().read_all()
+
+    m = Monitor(state, lambda alerts: None, backend_factory=Slow)
+    t = threading.Thread(target=m.run, daemon=True)
+    t.start()
+    t.join(5)
+    assert len(polls) >= 2, "the refresh requested during the first poll was dropped"

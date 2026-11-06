@@ -72,6 +72,61 @@ jobs:
           New-Item -ItemType Directory -Force out | Out-Null
           Copy-Item dist\Kataware.exe "out\Kataware-${{ matrix.label }}.exe"
 
+      - name: Microsoft Store package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          # Set these repository variables to the values Partner Center shows
+          # (Product identity) once the app name is reserved.
+          MSIX_IDENTITY_NAME: ${{ vars.MSIX_IDENTITY_NAME || 'kyonccc.Kataware' }}
+          MSIX_PUBLISHER: ${{ vars.MSIX_PUBLISHER || 'CN=Kataware' }}
+          MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.MSIX_PUBLISHER_DISPLAY_NAME || 'kyonccc' }}
+        run: |
+          $env:KATAWARE_ONEDIR = "1"
+          pyinstaller --noconfirm --distpath dist-onedir --workpath build-onedir packaging/kataware.spec
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Remove-Item Env:KATAWARE_ONEDIR
+
+          # 1) Unsigned package for Partner Center (the Store signs it)
+          ./packaging/build_msix.ps1 -AppDir dist-onedir/Kataware -OutFile msix/Kataware-Store.msix `
+            -IdentityName $env:MSIX_IDENTITY_NAME -Publisher $env:MSIX_PUBLISHER `
+            -PublisherDisplayName $env:MSIX_PUBLISHER_DISPLAY_NAME
+
+          # 2) Self-signed package to try the Store build on a PC before submitting
+          $pass = [guid]::NewGuid().ToString()
+          $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=Kataware Test" -KeyUsage DigitalSignature `
+            -FriendlyName "Kataware Test" -CertStoreLocation Cert:\CurrentUser\My `
+            -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
+          Export-PfxCertificate -Cert $cert -FilePath test.pfx -Password (ConvertTo-SecureString $pass -AsPlainText -Force) | Out-Null
+          Export-Certificate -Cert $cert -FilePath msix/Kataware-Test.cer | Out-Null
+          ./packaging/build_msix.ps1 -AppDir dist-onedir/Kataware -OutFile msix/Kataware-Test.msix `
+            -IdentityName "kyonccc.KatawareTest" -Publisher "CN=Kataware Test" -PublisherDisplayName "kyonccc (test)" `
+            -PfxFile test.pfx -PfxPassword $pass
+          Remove-Item test.pfx
+
+      - name: Self-test installed Store package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Import-Certificate -FilePath msix/Kataware-Test.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople | Out-Null
+          Add-AppxPackage -Path msix/Kataware-Test.msix
+          Get-AppxPackage kyonccc.KatawareTest | Format-List Name, PackageFamilyName, Version, InstallLocation
+          $alias = Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\kataware.exe"
+          $p = Start-Process -FilePath $alias -ArgumentList "--self-test", "$PWD\msix-selftest-report.json" -Wait -PassThru
+          Get-Content msix-selftest-report.json
+          $log = Get-ChildItem "$env:LOCALAPPDATA\Packages\kyonccc.KatawareTest_*\LocalState\kataware.log" -ErrorAction SilentlyContinue
+          if ($log) { Copy-Item $log.FullName msix-kataware.log }
+          Get-AppxPackage kyonccc.KatawareTest | Remove-AppxPackage
+          if ($p.ExitCode -ne 0) { if ($log) { Get-Content $log.FullName }; exit 1 }
+          $r = Get-Content msix-selftest-report.json -Raw | ConvertFrom-Json
+          if (-not $r.steps.package.detail.packaged) { Write-Error "app did not run as a package"; exit 1 }
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: runner.os == 'Windows'
+        with:
+          name: Kataware-MicrosoftStore
+          path: msix/*
+
       - name: Package (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -90,6 +145,8 @@ jobs:
           path: |
             selftest-report.json
             selftest-home/kataware.log
+            msix-selftest-report.json
+            msix-kataware.log
           if-no-files-found: ignore
 
   release:
@@ -120,6 +177,8 @@ jobs:
           merge-multiple: true
       - name: Checksums
         run: |
+          # Store packages are submitted through Partner Center, not released here
+          rm -f release/*.msix release/*.cer
           cd release
           sha256sum Kataware-* > SHA256SUMS.txt
           cat SHA256SUMS.txt
