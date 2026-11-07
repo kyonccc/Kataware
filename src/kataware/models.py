@@ -47,6 +47,8 @@ class LabeledLevel:
     label: str
     short: str
     level: int | None
+    handle: int = 0  # which BatteryCell it came from
+    charging: bool = False
 
 
 _PERIPHERAL_RE = re.compile(r"peripheral\s*(\d+)", re.IGNORECASE)
@@ -69,7 +71,7 @@ def label_cells(device: DeviceBattery, central_side: str = SIDE_LEFT) -> list[La
     if not cells:
         return []
     if len(cells) == 1:
-        return [LabeledLevel("本体", "", cells[0].level)]
+        return [LabeledLevel("本体", "", cells[0].level, cells[0].handle)]
 
     centrals = [c for c in cells if not _is_peripheral(c)]
     peripherals = [c for c in cells if _is_peripheral(c)]
@@ -83,15 +85,15 @@ def label_cells(device: DeviceBattery, central_side: str = SIDE_LEFT) -> list[La
     other_side = SIDE_RIGHT if central_side == SIDE_LEFT else SIDE_LEFT
     result: list[LabeledLevel] = []
     for c in centrals[:1]:
-        result.append(LabeledLevel(SIDE_NAMES[central_side], central_side[0].upper(), c.level))
+        result.append(LabeledLevel(SIDE_NAMES[central_side], central_side[0].upper(), c.level, c.handle))
     rest = centrals[1:] + peripherals
     if len(rest) == 1:
-        result.append(LabeledLevel(SIDE_NAMES[other_side], other_side[0].upper(), rest[0].level))
+        result.append(LabeledLevel(SIDE_NAMES[other_side], other_side[0].upper(), rest[0].level, rest[0].handle))
     else:
         for i, c in enumerate(rest):
             m = _PERIPHERAL_RE.search(c.description or "")
             n = int(m.group(1)) if m else i
-            result.append(LabeledLevel(f"ペリフェラル {n}", f"P{n}", c.level))
+            result.append(LabeledLevel(f"ペリフェラル {n}", f"P{n}", c.level, c.handle))
     order = {SIDE_NAMES[SIDE_LEFT]: 0, SIDE_NAMES[SIDE_RIGHT]: 1}
     result.sort(key=lambda x: order.get(x.label, 2))
     return result

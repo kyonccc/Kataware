@@ -24,7 +24,9 @@ Battery level monitor for Bluetooth devices on Windows and Mac. Shows both halve
 - **分割キーボード（ZMK など）は左右両方の残量を同時に表示**
   — OS の設定画面では片側しか見えない残量も確認できます
 - Windows はタスクトレイ（通知領域）、Mac はメニューバーに常駐（ウィンドウは開きません）
-- アイコンに残量を数字またはバーで表示、クリックで機器ごとの詳細
+- アイコンに残量を表示（リング・数字・バーから選択）、クリックで機器ごとの詳細
+  - **リング**（初期設定）: 銀の縁取りの時計風。左半分が左手、右半分が右手の残量で、中央に数字
+- 充電中は稲妻マーク ⚡ を表示（残量の上昇から推定。下の「充電中の表示について」を参照）
 - 残量が少なくなったら通知（10% / 20% / 30% / オフ）
 - 機器がつながった・切れた瞬間に表示を更新（Windows）。スリープ中のマウスや電源を切ったキーボードも、最後に読めた値をグレーで残します
 - 設定・ログはこの PC の中だけに保存し、外部への通信は一切しません（[プライバシーポリシー](PRIVACY.md)）
@@ -115,7 +117,7 @@ moNa2
 今すぐ更新
 左右の設定（メイン側）  ▶  メイン(セントラル)は左側 / 右側
 アイコンに表示する機器  ▶
-アイコンの表示形式      ▶  数字 / バー
+アイコンの表示形式      ▶  リング / 数字 / バー
 更新間隔                ▶  1 / 5 / 15 / 30 分
 残量低下の通知          ▶
 未接続の機器を一覧から消す
@@ -127,6 +129,12 @@ moNa2
 - 未接続の機器（スリープ中のマウスなど）は「mouse（未接続・23:25 の値）」のように最後の値を表示します。アプリを再起動しても残ります。
   不要になった機器は **未接続の機器を一覧から消す** で消せます
 - 残量は「更新間隔」ごとに読み取ります。Windows では機器がつながった・切れた時にもすぐ読み直します
+
+#### 充電中の表示について
+
+キーボードやマウスの多くは、Bluetooth で「残量の数値」しか送らず、「充電中かどうか」は送ってきません（ZMK も同様です）。
+そのため Kataware は、**残量が 2% 以上上がったら充電中**と判断して稲妻マーク ⚡ を表示し、残量が下がり始めたら（または 30 分上がらなければ）解除します。
+充電を始めてから表示されるまで数分〜十数分かかり、充電をやめてもしばらく表示が残ることがあります。充電中は残量低下の通知を出しません。
 
 #### 左右が逆に表示されるとき
 
@@ -179,7 +187,8 @@ CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_PROXY=y
 - **Shows both halves of split keyboards (ZMK etc.) at the same time**
   — the OS settings only ever show one of them
 - Lives in the Windows system tray / macOS menu bar (no window)
-- Tray icon shows the levels as numbers or bars; click for per-device details
+- Tray icon shows the levels as a ring (default: silver bezel, left / right half rings with the numbers in the middle), numbers or bars; click for per-device details
+- A lightning bolt ⚡ marks a battery that is charging. Devices only report a level, so charging is inferred from the level rising by 2 points or more; it appears a few minutes after charging starts and clears once the level drops (or stops rising for 30 minutes)
 - Low battery notifications (10% / 20% / 30% / off)
 - Refreshes as soon as a device connects or disconnects (Windows); sleeping / switched-off devices keep their last value, shown in gray
 - Settings and logs stay on your computer; the app never talks to the internet ([privacy policy](PRIVACY.md))
@@ -301,3 +310,6 @@ kyonccc provided the idea, the requirements and the direction for the name and i
 ## ライセンス / License
 
 [MIT](LICENSE) © 2026 kyonccc
+
+アイコンの数字には [Inter](https://github.com/rsms/inter) フォント（SIL Open Font License 1.1、`src/kataware/assets/Inter-OFL.txt`）を同梱しています。
+The tray icon numbers use the bundled [Inter](https://github.com/rsms/inter) font (SIL Open Font License 1.1).

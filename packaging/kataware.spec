@@ -27,6 +27,7 @@ a = Analysis(
     [str(Path(SPECPATH) / "entry.py")],
     pathex=[str(ROOT / "src")],
     hiddenimports=hidden,
+    datas=[(str(ROOT / "src" / "kataware" / "assets"), "kataware/assets")],
     excludes=["tkinter", "unittest", "pytest"],
 )
 pyz = PYZ(a.pure)

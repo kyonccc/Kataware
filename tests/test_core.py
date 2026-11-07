@@ -60,7 +60,7 @@ def test_settings_roundtrip_and_corrupt_file(tmp_path):
     path.write_text("{not json", encoding="utf-8")
     assert SettingsStore(path).settings.poll_minutes == 5
     path.write_text(json.dumps({"icon_style": "weird", "unknown": 1}), encoding="utf-8")
-    assert SettingsStore(path).settings.icon_style == "numbers"
+    assert SettingsStore(path).settings.icon_style == "ring"
 
 
 def test_low_battery_alert_once_with_hysteresis(tmp_path):
@@ -221,3 +221,42 @@ def test_refresh_requested_during_poll_is_not_lost(tmp_path):
     t.start()
     t.join(5)
     assert len(polls) >= 2, "the refresh requested during the first poll was dropped"
+
+
+def test_charging_is_estimated_from_rising_levels(tmp_path):
+    state = MonitorState(SettingsStore(tmp_path / "c.json"))
+    t = 0.0
+
+    def poll(left, right):
+        nonlocal t
+        t += 300
+        state.apply([zmk(left, right)], now=t)
+        return {lv.label: lv.charging for lv in state.labeled(state.devices["kb"])}
+
+    assert poll(50, 40) == {"左": False, "右": False}
+    assert poll(50, 41) == {"左": False, "右": False}   # +1: could be noise
+    assert poll(50, 43) == {"左": False, "右": True}    # +3 over the floor: charging
+    assert poll(49, 42) == {"左": False, "右": True}    # 1-point dip while charging is ignored
+    assert poll(49, 39) == {"左": False, "右": False}   # real drop: unplugged
+    # left goes to 100 and stays: still "charging" (full) until it drops
+    for lv in (60, 80, 100, 100, 100):
+        state.apply([zmk(lv, 39)], now=(t := t + 3600))
+    assert {lv.label: lv.charging for lv in state.labeled(state.devices["kb"])}["左"]
+
+
+def test_no_low_battery_alert_while_charging(tmp_path):
+    state = MonitorState(SettingsStore(tmp_path / "c.json"))
+    state.apply([zmk(80, 10)], now=0)            # low -> alert
+    state.apply([zmk(80, 14)], now=300)          # charging starts
+    assert state.labeled(state.devices["kb"])[1].charging
+
+
+def test_ring_icon_renders_all_states():
+    from kataware.icon import _FONT_FILE
+    from kataware.models import LabeledLevel as LL
+
+    assert _FONT_FILE.exists(), "bundled Inter font missing"
+    for levels in ([LL("左", "L", 86, 1), LL("右", "R", 35, 2, True)], [LL("本体", "", 100, 1)],
+                   [LL("左", "L", None, 1), LL("右", "R", 0, 2)]):
+        for connected in (True, False):
+            assert render_icon(levels, "ring", connected=connected).size == (64, 64)

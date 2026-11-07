@@ -18,6 +18,54 @@ log = logging.getLogger(__name__)
 
 NOTIFY_HYSTERESIS = 5
 
+# Charging estimate. Keyboards and mice only report a level, not whether they
+# are charging, so infer it: a rise of CHARGE_RISE points over the lowest
+# recent level means "charging"; a real drop (more than 1 point below the
+# peak, to ignore voltage jitter) or no rise for CHARGE_STALE seconds below
+# 100% ends it.
+CHARGE_RISE = 2
+CHARGE_STALE = 30 * 60
+
+
+@dataclass
+class _ChargeTrack:
+    last: int
+    floor: int
+    peak: int
+    last_rise: float
+    charging: bool = False
+
+
+class ChargeEstimator:
+    def __init__(self):
+        self.tracks: dict[tuple[str, int], _ChargeTrack] = {}
+
+    def update(self, key: tuple[str, int], level: int, now: float) -> bool:
+        t = self.tracks.get(key)
+        if t is None:
+            self.tracks[key] = _ChargeTrack(level, level, level, now)
+            return False
+        if level > t.last:
+            t.last_rise = now
+            t.peak = max(t.peak, level)
+            if level >= t.floor + CHARGE_RISE:
+                t.charging = True
+        elif level < t.last:
+            if not (t.charging and level >= t.peak - 1):
+                t.charging = False
+                t.floor = t.peak = level
+        elif t.charging and level < 100 and now - t.last_rise > CHARGE_STALE:
+            t.charging = False
+            t.floor = t.peak = level
+        if not t.charging:
+            t.floor = min(t.floor, level)
+        t.last = level
+        return t.charging
+
+    def is_charging(self, key: tuple[str, int]) -> bool:
+        t = self.tracks.get(key)
+        return bool(t and t.charging)
+
 
 @dataclass
 class LowBatteryAlert:
@@ -35,6 +83,7 @@ class MonitorState:
         self.status: str = "起動中…"
         self.last_poll: float | None = None
         self._alerted: set[tuple[str, str]] = set()
+        self.charge = ChargeEstimator()
         self.lock = threading.RLock()
         # Last known values survive restarts so a sleeping mouse or a keyboard
         # that is switched off still shows where its battery was.
@@ -80,13 +129,22 @@ class MonitorState:
         return self.store.settings.central_side.get(device_id, SIDE_LEFT)
 
     def labeled(self, dev: DeviceBattery) -> list[LabeledLevel]:
-        return label_cells(dev, self.central_side(dev.device_id))
+        levels = label_cells(dev, self.central_side(dev.device_id))
+        if dev.connected:
+            for lv in levels:
+                lv.charging = self.charge.is_charging((dev.device_id, lv.handle))
+        return levels
 
-    def apply(self, readings: list[DeviceBattery]) -> list[LowBatteryAlert]:
+    def apply(self, readings: list[DeviceBattery], now: float | None = None) -> list[LowBatteryAlert]:
+        now = time.time() if now is None else now
         with self.lock:
             seen = set()
             for r in readings:
                 seen.add(r.device_id)
+                if not r.error:
+                    for c in r.cells:
+                        if c.level is not None:
+                            self.charge.update((r.device_id, c.handle), c.level, now)
                 prev = self.devices.get(r.device_id)
                 if r.error and prev is not None and prev.cells:
                     # keep the last good values, just show the error
@@ -119,6 +177,10 @@ class MonitorState:
                 if lv.level is None:
                     continue
                 key = (dev.device_id, lv.label)
+                if lv.charging:  # no low-battery warning while it charges
+                    if lv.level > threshold + NOTIFY_HYSTERESIS:
+                        self._alerted.discard(key)
+                    continue
                 if threshold and lv.level <= threshold:
                     if key not in self._alerted:
                         self._alerted.add(key)

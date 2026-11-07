@@ -115,7 +115,8 @@ class TrayApp:
         for dev in self.state.sorted_devices():
             if not dev.connected:
                 continue
-            parts = " / ".join(f"{lv.label} {format_level(lv.level)}" for lv in self.state.labeled(dev))
+            parts = " / ".join(f"{lv.label} {format_level(lv.level)}{'⚡' if lv.charging else ''}"
+                               for lv in self.state.labeled(dev))
             lines.append(f"{dev.name}: {parts}" if parts else dev.name)
         text = "\n".join(lines) or self.state.status or APP_NAME
         return text[:127]  # Windows tooltip limit
@@ -150,7 +151,8 @@ class TrayApp:
             header = dev.name if dev.connected else f"{dev.name}（未接続・{_when(dev.updated_at)} の値）"
             yield Item(header, None, enabled=False)
             for lv in self.state.labeled(dev):
-                yield Item(f"    {lv.label}: {format_level(lv.level)}", None, enabled=False)
+                yield Item(f"    {lv.label}: {format_level(lv.level)}{'（充電中）' if lv.charging else ''}",
+                           None, enabled=False)
             if dev.error:
                 yield Item(f"    ⚠ {dev.error}", None, enabled=False)
 
@@ -177,6 +179,7 @@ class TrayApp:
                        checked=self._is_icon_device(d.device_id), radio=True) for d in devices],
             ))
         yield Item("アイコンの表示形式", Menu(
+            Item("リング", self._set_style("ring"), checked=lambda _: s.icon_style == "ring", radio=True),
             Item("数字", self._set_style("numbers"), checked=lambda _: s.icon_style == "numbers", radio=True),
             Item("バー", self._set_style("bars"), checked=lambda _: s.icon_style == "bars", radio=True),
         ))

@@ -57,7 +57,7 @@ def setup_logging(verbose: bool = False) -> None:
 class Settings:
     poll_minutes: int = 5
     low_threshold: int = 20  # 0 disables notifications
-    icon_style: str = "numbers"  # "numbers" or "bars"
+    icon_style: str = "ring"  # "ring", "numbers" or "bars"
     icon_device: str = ""  # device_id shown in the tray icon; "" = auto
     central_side: dict[str, str] = field(default_factory=dict)  # device_id -> "left"/"right"
     welcomed: bool = False  # first-launch "where is the icon" notification shown
@@ -74,8 +74,8 @@ class SettingsStore:
             data = json.loads(self.path.read_text(encoding="utf-8"))
             known = {k: v for k, v in data.items() if k in Settings.__dataclass_fields__}
             s = Settings(**known)
-            if s.icon_style not in ("numbers", "bars"):
-                s.icon_style = "numbers"
+            if s.icon_style not in ("ring", "numbers", "bars"):
+                s.icon_style = "ring"
             s.poll_minutes = max(1, int(s.poll_minutes))
             s.low_threshold = max(0, min(100, int(s.low_threshold)))
             if not isinstance(s.central_side, dict):
